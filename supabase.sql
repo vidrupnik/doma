@@ -12,6 +12,7 @@ begin new.updated_at = clock_timestamp(); return new; end $$;
 drop trigger if exists items_touch on items;
 create trigger items_touch before insert or update on items for each row execute function touch();
 
+grant select, insert, update, delete on public.items to anon;
 alter table items enable row level security;
 drop policy if exists family_all on items;
 create policy family_all on items for all to anon using (true) with check (true);

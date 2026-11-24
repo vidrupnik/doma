@@ -19,6 +19,9 @@ Aplikacija je spletna stran (PWA), ki jo vsak doda na domači zaslon telefona. P
 - **Android (Chrome):** odpri naslov > ⋮ > **Namesti aplikacijo** / Dodaj na začetni zaslon.
 - Ob prvem odprtju izbereš, kdo si.
 
+Če aplikacija javi "permission denied for table items", v SQL Editorju zaženi:
+`grant select, insert, update, delete on public.items to anon;`
+
 ## Varnost
 Kdor pozna naslov strani, lahko vidi in spreminja podatke. Za družino je to v redu, le povezave ne deli javno.
 
