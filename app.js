@@ -340,7 +340,7 @@ function viewRewards() {
     <button class="sec" data-act="newreward" style="width:100%;margin-top:6px">+ Dodaj nagrado</button>
     <h2>Pravila točk</h2><div class="card s">Ocena ostalih: 5★ = 125 %, 4★ = 110 %, 3★ = 95 %, 1★ = 65 % osnovnih XP. Zamuda −30 %. Prevzem tujega opravila +20 %. Osebne nagrade porabijo tvoje XP, nivo pa ostane.</div>
     <button class="ghost" data-act="logout" style="width:100%;margin-top:12px">Zamenjaj osebo (${esc(me)})</button>
-    <p class="s" style="text-align:center">${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
+    <p class="s" style="text-align:center">v3 · ${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
 }
 
 // ---------- Dialogi ----------
