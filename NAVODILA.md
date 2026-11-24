@@ -26,7 +26,11 @@ Aplikacija je spletna stran (PWA), ki jo vsak doda na domači zaslon telefona. P
 Kdor pozna naslov strani, lahko vidi in spreminja podatke. Za družino je to v redu, le povezave ne deli javno.
 
 ## Kako deluje
-- Dnevno: posoda (do 21:00) in dva sprehoda Zuma (zjutraj do 10:00, zvečer do 21:00) se vsak dan zavrtijo, vsak dan jih ima drug član.
-- Tedensko: kopalnica, tla + sesanje, perilo (rok nedelja 20:00) se vsak teden zavrtijo.
-- Ostali ocenijo opravljeno (1–5★). XP: 5★ = 125 %, 3★ = 95 %, 1★ = 65 %, zamuda −30 %, prevzem tujega opravila +20 %.
+- Vsak dan: 🐶 sprehod Zuma popoldne (do 19:00) in 🍽️ posoda (do 21:00).
+- Enkrat na teden (do nedelje 20:00): tla sesanje, tla pomivanje, kopalnica/WC, smeti, perilo pranje, perilo zlaganje/likanje.
+- V zavihku **Plan** si vsak sam izbere opravila in dneve, ko ima Zuma. Vrstice kažejo, koliko točk ima kdo glede na pravičen delež.
+- Kar ostane prosto, se samodejno dodeli tistemu z najmanj točkami ta teden: dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00.
+- Ostali ocenijo opravljeno (1–5★): 5★ = 125 %, 3★ = 95 %, 1★ = 65 % XP. Prevzem tujega opravila +20 %.
+- Kazni: zamuda −25 % XP, neopravljeno 24 h po roku −50 % XP opravila.
+- Pomotoma odkljukano opravilo vrneš z "↩ Razveljavi".
 - Opravila, XP in roke se spremenijo na vrhu datoteke `app.js`.

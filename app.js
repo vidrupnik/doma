@@ -9,18 +9,22 @@ const MEMBERS = [
   { name: 'Oči', ico: '👨' },
 ];
 const N = MEMBERS.length;
-// Dnevna opravila: vsak dan jih dobi drug član (offset poskrbi, da niso vsa na isti osebi)
+// Dnevna opravila (vsak dan): kdo jih dela, si izberete v zavihku Plan
 const DAILY = [
-  { id: 'posoda', name: 'Pomivanje posode + zlaganje', ico: '🍽️', xp: 25, due: '21:00', off: 0 },
-  { id: 'zuma-j', name: 'Sprehod Zuma (zjutraj)', ico: '🐕', xp: 20, due: '10:00', off: 1 },
-  { id: 'zuma-v', name: 'Sprehod Zuma (zvečer)', ico: '🐕', xp: 20, due: '21:00', off: 3 },
+  { id: 'pes', name: 'Sprehod Zuma (popoldne)', ico: '🐶', xp: 25, due: '19:00' },
+  { id: 'posoda', name: 'Posoda (pomivanje, stroj)', ico: '🍽️', xp: 25, due: '21:00' },
 ];
-// Tedenska opravila: rok nedelja 20:00, vsak teden se zavrtijo
+// Tedenska opravila (enkrat na teden, rok nedelja 20:00)
 const WEEKLY = [
-  { id: 'kopalnica', name: 'Pospravljanje kopalnice', ico: '🛁', xp: 60 },
-  { id: 'tla', name: 'Pomivanje tal + sesanje', ico: '🧹', xp: 60 },
-  { id: 'perilo', name: 'Pranje perila + zlaganje', ico: '👕', xp: 60 },
+  { id: 'sesanje', name: 'Tla: sesanje', ico: '🧹', xp: 35 },
+  { id: 'tla', name: 'Tla: pomivanje', ico: '🧽', xp: 35 },
+  { id: 'kopalnica', name: 'Kopalnica, WC: čiščenje', ico: '🚿', xp: 60 },
+  { id: 'smeti', name: 'Smeti', ico: '🗑️', xp: 20 },
+  { id: 'pranje', name: 'Perilo: pranje', ico: '👕', xp: 30 },
+  { id: 'zlaganje', name: 'Perilo: zlaganje, likanje', ico: '👔', xp: 40 },
 ];
+const LATE = 0.25;   // zamuda: −25 % XP
+const MISSED = 0.5;  // neopravljeno 24 h po roku: kazen −50 % XP opravila
 const ANCHOR = new Date(2026, 10, 23); // ponedeljek, začetek rotacije
 const CATS = ['Dovoz', 'Hiša', 'Vrt', 'Avto', 'Drugo'];
 
@@ -113,23 +117,47 @@ function api(path, opt = {}) {
 }
 
 // ---------- Razpored ----------
-// Vrne vsa opravila (instance) v obdobju dni [from, to]
-function chores(fromDay, toDay) {
-  const out = [];
-  for (let d = fromDay; d <= toDay; d++) {
-    const date = fromDayIdx(d);
+// Vsak si sam izbere opravila (zavihek Plan). Kar ostane prosto, se samodejno dodeli
+// tistemu, ki ima ta teden najmanj točk (dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00).
+let planCache = {};
+const PLAN_START = 2; // sreda 25. 11. 2026: od tu naprej velja izbiranje in kazni
+const startDay = () => Math.max(PLAN_START, Store.get('start') ? Store.get('start').data.day : dayIdx(new Date()));
+function weekPlan(w) {
+  if (planCache[w]) return planCache[w];
+  const slots = [];
+  for (let k = 0; k < 7; k++) {
+    const d = w * 7 + k, date = fromDayIdx(d);
     for (const c of DAILY) {
       const [h, m] = c.due.split(':');
-      out.push({ id: c.id + '@' + d, def: c, who: MEMBERS[mod(d + c.off, N)].name, due: new Date(date.getFullYear(), date.getMonth(), date.getDate(), +h, +m).getTime(), day: d, daily: true });
+      slots.push({ id: c.id + '@' + d, def: c, day: d, daily: true, week: w,
+        due: new Date(date.getFullYear(), date.getMonth(), date.getDate(), +h, +m).getTime(),
+        autoAt: new Date(date.getFullYear(), date.getMonth(), date.getDate(), 12, 0).getTime() });
     }
   }
-  const w1 = Math.floor(fromDay / 7), w2 = Math.floor(toDay / 7);
-  for (let w = w1; w <= w2; w++) {
-    const sun = fromDayIdx(w * 7 + 6);
-    WEEKLY.forEach((c, i) => {
-      out.push({ id: c.id + '#' + w, def: c, who: MEMBERS[mod(w + i, N)].name, due: new Date(sun.getFullYear(), sun.getMonth(), sun.getDate(), 20, 0).getTime(), week: w });
-    });
+  const sun = fromDayIdx(w * 7 + 6), wed = fromDayIdx(w * 7 + 2);
+  WEEKLY.forEach((c) => slots.push({ id: c.id + '#' + w, def: c, week: w, day: w * 7 + 6,
+    due: new Date(sun.getFullYear(), sun.getMonth(), sun.getDate(), 20, 0).getTime(), autoAt: new Date(wed.getFullYear(), wed.getMonth(), wed.getDate(), 20, 0).getTime() }));
+  const claims = {};
+  for (const s of slots) { const c = Store.get('c:' + s.id); if (c) claims[s.id] = c.data; }
+  const now = Date.now(), start = startDay();
+  const autos = [];
+  for (const s of slots) {
+    if (claims[s.id]) { s.who = claims[s.id].who; s.claimed = true; continue; }
+    if (s.day < start || now < s.autoAt) { s.who = null; continue; }
+    // samodejno: najmanj točk ta teden (upoštevamo izbire pred tem trenutkom + prejšnje samodejne)
+    const load = {}; MEMBERS.forEach((m) => (load[m.name] = 0));
+    for (const o of slots) if (claims[o.id] && claims[o.id].at < s.autoAt) load[claims[o.id].who] += o.def.xp;
+    for (const a of autos) load[a.who] += a.def.xp;
+    const order = MEMBERS.map((m, i) => MEMBERS[mod(i + w + s.day, N)].name);
+    s.who = order.reduce((b, n) => (load[n] < load[b] ? n : b), order[0]);
+    s.auto = true; autos.push(s);
   }
+  return (planCache[w] = slots);
+}
+function chores(fromDay, toDay) {
+  const out = [];
+  for (let w = Math.floor(fromDay / 7); w <= Math.floor(toDay / 7); w++)
+    for (const s of weekPlan(w)) if (!s.daily || (s.day >= fromDay && s.day <= toDay)) out.push(s);
   return out;
 }
 function projectTask(p) {
@@ -140,8 +168,7 @@ function taskById(id) {
   const m = id.match(/^(.+)([@#])(-?\d+)$/);
   if (!m) return null;
   const n = +m[3];
-  const list = m[2] === '@' ? chores(n, n) : chores(n * 7, n * 7);
-  return list.find((t) => t.id === id);
+  return weekPlan(m[2] === '@' ? Math.floor(n / 7) : n).find((t) => t.id === id);
 }
 
 // ---------- Točke ----------
@@ -154,28 +181,35 @@ function scoreDone(d) {
   let mult = avg == null ? 1 : 0.5 + avg * 0.15; // 5★ = 125 %, 3★ = 95 %, 1★ = 65 %
   const late = d.data.at > t.due;
   const takeover = t.who && d.data.by !== t.who;
-  if (late) mult *= 0.7;
+  if (late) mult *= 1 - LATE;
   if (takeover) mult *= 1.2;
   return { xp: Math.round(t.def.xp * mult), avg, n: rs.length, late, takeover, task: t };
 }
 function stats() {
   const s = {};
-  MEMBERS.forEach((m) => (s[m.name] = { xp: 0, week: 0, spent: 0, zuma: 0, five: 0, take: 0, proj: 0, done: 0 }));
+  MEMBERS.forEach((m) => (s[m.name] = { xp: 0, week: 0, spent: 0, pen: 0, zuma: 0, five: 0, take: 0, proj: 0, done: 0 }));
   const wk = weekIdx(new Date());
   for (const d of Store.list('done')) {
     const p = s[d.data.by]; if (!p) continue;
     const sc = scoreDone(d);
     p.xp += sc.xp; p.done++;
     if (weekIdx(new Date(d.data.at)) === wk) p.week += sc.xp;
-    if (d.id.startsWith('zuma')) p.zuma++;
+    if (d.id.startsWith('pes')) p.zuma++;
     if (sc.avg === 5) p.five++;
     if (sc.takeover) p.take++;
     if (d.id.startsWith('p:')) p.proj++;
   }
+  // kazni za neopravljeno (24 h po roku)
+  const now = Date.now(), start = startDay();
+  for (let w = Math.floor(start / 7); w <= wk; w++)
+    for (const t of weekPlan(w)) if (t.who && t.day >= start && now > t.due + DAY && !Store.get(t.id) && s[t.who]) {
+      const pen = Math.round(t.def.xp * MISSED);
+      s[t.who].xp -= pen; s[t.who].pen += pen; if (w === wk) s[t.who].week -= pen;
+    }
   for (const r of Store.list('reward')) for (const c of r.data.claims || []) if (!r.data.group && s[c.by]) s[c.by].spent += +r.data.cost;
   return s;
 }
-const level = (xp) => Math.floor(Math.sqrt(xp / 50)) + 1;
+const level = (xp) => Math.floor(Math.sqrt(Math.max(0, xp) / 50)) + 1;
 const lvlXp = (l) => 50 * (l - 1) ** 2;
 function badges(p) {
   const b = [];
@@ -204,6 +238,7 @@ function toRate() {
 
 // ---------- Izris ----------
 function render() {
+  planCache = {};
   const app = $('#app');
   if (!me) {
     app.innerHTML = `<main><h1 style="margin-top:40px">DOMA 🏠</h1><p class="s">Kdo si? (izbereš samo enkrat na tem telefonu)</p>
@@ -213,13 +248,13 @@ function render() {
   const s = stats()[me];
   const lv = level(s.xp), pct = ((s.xp - lvlXp(lv)) / (lvlXp(lv + 1) - lvlXp(lv))) * 100;
   const nRate = toRate().length;
-  const views = { moje: viewMine, ocene: viewRate, projekti: viewProjects, nakupi: viewShop, nagrade: viewRewards };
+  const views = { moje: viewMine, plan: viewPlan, ocene: viewRate, projekti: viewProjects, nakupi: viewShop, nagrade: viewRewards };
   app.innerHTML = `
   <header><div style="font-size:34px">${member(me).ico}</div>
     <div class="who"><h1>${esc(me)}</h1><small>${s.xp} XP · še ${lvlXp(lv + 1) - s.xp} do nivoja ${lv + 1}</small><div class="bar"><i style="width:${pct}%"></i></div></div>
     <span class="lvl">Nv. ${lv}</span></header>
   <main>${views[tab]()}</main>
-  <nav>${[['moje', '✅', 'Opravila'], ['ocene', '⭐', 'Ocene'], ['projekti', '🏗️', 'Projekti'], ['nakupi', '🛒', 'Nakupi'], ['nagrade', '🏆', 'Nagrade']]
+  <nav>${[['moje', '✅', 'Opravila'], ['plan', '📅', 'Plan'], ['ocene', '⭐', 'Ocene'], ['projekti', '🏗️', 'Projekti'], ['nakupi', '🛒', 'Nakupi'], ['nagrade', '🏆', 'Nagrade']]
     .map(([k, i, l]) => `<button data-act="tab" data-v="${k}" class="${tab === k ? 'on' : ''}"><b>${i}</b>${l}${k === 'ocene' && nRate ? `<span class="badge">${nRate}</span>` : ''}</button>`).join('')}</nav>`;
 }
 
@@ -229,13 +264,15 @@ function taskCard(t, mine) {
   let right;
   if (d) {
     const sc = scoreDone(d);
-    right = `<div class="done" style="text-align:right">✔ ${d.data.by === t.who ? '' : esc(d.data.by) + '<br>'}<small>${sc.xp} XP${sc.n ? ' · ' + sc.avg.toFixed(1) + '★' : ''}</small></div>`;
+    right = `<div class="done" style="text-align:right">✔ ${d.data.by === t.who ? '' : esc(d.data.by) + '<br>'}<small>${sc.xp} XP${sc.n ? ' · ' + sc.avg.toFixed(1) + '★' : ''}</small>${d.data.by === me ? `<br><button class="ghost" data-act="undo" data-v="${t.id}">↩ Razveljavi</button>` : ''}</div>`;
+  } else if (!t.who && !t.project) {
+    right = `<button data-act="claim1" data-v="${t.id}" class="sec">Vzamem</button>`;
   } else {
     right = `<button data-act="complete" data-v="${t.id}" class="${mine ? '' : 'sec'}">${mine ? 'Opravljeno' : 'Prevzemi'}</button>`;
   }
   return `<div class="card row ${d ? 'mut' : ''}"><div class="ico">${t.def.ico}</div>
     <div class="grow"><div class="t">${esc(t.def.name)}</div>
-    <div class="s ${late ? 'late' : ''}">${mine ? '' : member(t.who).ico + ' ' + esc(t.who) + ' · '}${late ? 'zamuda! ' : 'do '}${fmtDue(t.due)} · ${t.def.xp} XP</div></div>${right}</div>`;
+    <div class="s ${late ? 'late' : ''}">${mine ? '' : (t.who ? member(t.who).ico + ' ' + esc(t.who) : 'prosto') + ' · '}${late ? 'zamuda! ' : 'do '}${fmtDue(t.due)} · ${t.def.xp} XP${late && !t.project ? ` · <b>−${Math.round(t.def.xp * MISSED)} XP</b> če ni narejeno v 24 h` : ''}</div></div>${right}</div>`;
 }
 
 function viewMine() {
@@ -243,21 +280,51 @@ function viewMine() {
   const all = chores(today - 6, today + 1);
   const wk = weekIdx(new Date());
   const isCurrent = (t) => (t.daily ? t.day === today : t.week === wk);
-  const start = Store.get('start') ? Store.get('start').data.day : today;
-  const fromStart = (t) => (t.daily ? t.day >= start : (t.week + 1) * 7 > start);
-  const overdue = all.filter((t) => t.who === me && !Store.get(t.id) && t.due < Date.now() && !isCurrent(t) && fromStart(t));
+  const start = startDay();
+  const overdue = all.filter((t) => t.who === me && !Store.get(t.id) && t.due < Date.now() && !isCurrent(t) && t.day >= start);
   const mine = all.filter((t) => t.who === me && isCurrent(t));
   const myProj = Store.list('project').filter((p) => p.data.owner === me && !Store.get('p:' + p.id)).map(projectTask);
   const tomorrow = all.filter((t) => t.who === me && t.daily && t.day === today + 1);
-  const others = all.filter((t) => t.who !== me && isCurrent(t)).sort((a, b) => a.due - b.due);
+  const others = all.filter((t) => t.who !== me && isCurrent(t) && t.day >= start).sort((a, b) => a.due - b.due);
+  const free = chores(today, today + 7).filter((t) => !t.who && t.day >= start).length;
   const doneCnt = mine.filter((t) => Store.get(t.id)).length;
   return `
+    ${free ? `<div class="card row" data-act="tab" data-v="plan" style="cursor:pointer"><div class="ico">📅</div><div class="grow"><div class="t">${free} prostih opravil</div><div class="s">Izberi si, kaj boš delal in kdaj imaš Zuma</div></div><b>›</b></div>` : ''}
     ${overdue.length ? `<h2 class="late">Zamujeno</h2>${overdue.map((t) => taskCard(t, true)).join('')}` : ''}
     <h2>Moje danes in ta teden · ${doneCnt}/${mine.length}</h2>
     ${mine.length ? mine.sort((a, b) => a.due - b.due).map((t) => taskCard(t, true)).join('') : '<div class="card s">Danes nimaš dodeljenih opravil 🎉</div>'}
     ${myProj.length ? `<h2>Moji projekti</h2>${myProj.map((t) => taskCard(t, true)).join('')}` : ''}
     ${tomorrow.length ? `<h2>Jutri</h2>${tomorrow.map((t) => `<div class="card row mut"><div class="ico">${t.def.ico}</div><div class="grow">${esc(t.def.name)}</div></div>`).join('')}` : ''}
-    <h2>Ostali (lahko prevzameš za +20 % XP)</h2>${others.map((t) => taskCard(t, false)).join('')}`;
+    <h2>Ostali (prevzem tujega +20 % XP)</h2>${others.map((t) => taskCard(t, false)).join('')}`;
+}
+
+let planWeek = 0;
+function viewPlan() {
+  const w = weekIdx(new Date()) + planWeek, start = startDay();
+  const slots = weekPlan(w).filter((t) => t.day >= start || !t.daily);
+  const load = {}; MEMBERS.forEach((m) => (load[m.name] = 0));
+  let total = 0;
+  slots.forEach((t) => { total += t.def.xp; if (t.who) load[t.who] += t.def.xp; });
+  const fair = Math.round(total / N);
+  const chip = (t) => {
+    const d = Store.get(t.id);
+    if (d) return `<span class="pill" style="background:none;color:var(--ok)">✔ ${esc(d.data.by)}</span>`;
+    if (!t.who) return `<button class="sec" data-act="claim1" data-v="${t.id}" style="padding:6px 10px">Vzamem</button>`;
+    if (t.who === me && t.claimed) return `<button data-act="release" data-v="${t.id}" style="padding:6px 10px">${member(me).ico} Jaz ✕</button>`;
+    return `<span class="pill">${member(t.who).ico} ${esc(t.who)}${t.auto ? ' ⚙' : ''}</span>`;
+  };
+  const days = [...new Set(slots.filter((t) => t.daily).map((t) => t.day))];
+  const mon = fromDayIdx(w * 7);
+  return `<div class="seg"><button data-act="pweek" data-v="0" class="${planWeek === 0 ? '' : 'sec'}">Ta teden</button><button data-act="pweek" data-v="1" class="${planWeek === 1 ? '' : 'sec'}">Naslednji teden</button></div>
+    <div class="card"><div class="s" style="margin-bottom:6px">Pravičen delež: <b>${fair} XP</b> na osebo (teden od ${mon.getDate()}. ${mon.getMonth() + 1}.)</div>
+    ${MEMBERS.map((m) => `<div class="row" style="gap:8px;margin:4px 0"><span style="width:70px">${m.ico} ${esc(m.name)}</span><div class="bar grow" style="margin:0"><i style="width:${Math.min(100, (load[m.name] / (fair || 1)) * 100)}%"></i></div><span class="s" style="width:56px;text-align:right">${load[m.name]}</span></div>`).join('')}</div>
+    <h2>Enkrat na teden (do nedelje 20:00)</h2>
+    ${slots.filter((t) => !t.daily).map((t) => `<div class="card row" style="padding:10px 14px"><div class="ico">${t.def.ico}</div><div class="grow"><div class="t">${esc(t.def.name)}</div><div class="s">${t.def.xp} XP</div></div>${chip(t)}</div>`).join('')}
+    <h2>Vsak dan: 🐶 Zum (popoldne) in 🍽️ posoda</h2>
+    ${days.map((d) => { const dt = fromDayIdx(d); const [pes, pos] = DAILY.map((c) => slots.find((t) => t.id === c.id + '@' + d));
+      return `<div class="card" style="padding:10px 14px"><div class="t" style="margin-bottom:6px">${DNI[dt.getDay()]} ${dt.getDate()}. ${dt.getMonth() + 1}.${d === dayIdx(new Date()) ? ' · danes' : ''}</div>
+        <div class="row" style="justify-content:space-between"><span>🐶 ${chip(pes)}</span><span>🍽️ ${chip(pos)}</span></div></div>`; }).join('')}
+    <p class="s">Kar ostane prosto, se samodejno (⚙) dodeli tistemu z najmanj točkami: dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00. Svojo izbiro lahko sprostiš s ✕, dokler ni opravljeno.</p>`;
 }
 
 function viewRate() {
@@ -338,9 +405,9 @@ function viewRewards() {
     ${rws.filter((r) => !r.data.group).map((r) => `<div class="card row"><div class="ico">🎁</div><div class="grow"><div class="t">${esc(r.data.title)}</div><div class="s">${r.data.cost} XP${(r.data.claims || []).length ? ' · unovčili: ' + r.data.claims.map((c) => esc(c.by)).join(', ') : ''}</div></div>
       <button data-act="claim" data-v="${r.id}" ${avail < r.data.cost ? 'disabled' : ''}>Unovči</button></div>`).join('') || '<div class="card s">Še ni nagrad.</div>'}
     <button class="sec" data-act="newreward" style="width:100%;margin-top:6px">+ Dodaj nagrado</button>
-    <h2>Pravila točk</h2><div class="card s">Ocena ostalih: 5★ = 125 %, 4★ = 110 %, 3★ = 95 %, 1★ = 65 % osnovnih XP. Zamuda −30 %. Prevzem tujega opravila +20 %. Osebne nagrade porabijo tvoje XP, nivo pa ostane.</div>
+    <h2>Pravila točk</h2><div class="card s">Ocena ostalih: 5★ = 125 %, 4★ = 110 %, 3★ = 95 %, 1★ = 65 % osnovnih XP. Zamuda −25 %. Neopravljeno 24 h po roku: kazen −50 % XP opravila. Prevzem tujega opravila +20 %. Osebne nagrade porabijo tvoje XP, nivo pa ostane.</div>
     <button class="ghost" data-act="logout" style="width:100%;margin-top:12px">Zamenjaj osebo (${esc(me)})</button>
-    <p class="s" style="text-align:center">v3 · ${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
+    <p class="s" style="text-align:center">v4 · ${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
 }
 
 // ---------- Dialogi ----------
@@ -391,6 +458,15 @@ const actions = {
       await Store.put(id, 'done', { by: me, at: Date.now(), note: f.note.value.trim(), photo });
       toast('Bravo! +' + t.def.xp + ' XP (čaka na oceno)');
     });
+  },
+  pweek: (v) => { planWeek = +v; render(); },
+  claim1: async (id) => { await Store.put('c:' + id, 'claim', { who: me, at: Date.now() }); toast('Vzel si opravilo ✔'); },
+  release: async (id) => { await Store.del('c:' + id); },
+  undo: async (id) => {
+    if (!confirm('Vrnem opravilo nazaj na neopravljeno? Ocene se izbrišejo.')) return;
+    for (const r of ratingsFor(id)) await Store.del(r.id);
+    await Store.del(id);
+    toast('Vrnjeno na neopravljeno');
   },
   star: (v, el) => {
     const box = el.parentElement; box.dataset.val = v;
