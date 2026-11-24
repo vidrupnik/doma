@@ -27,11 +27,11 @@ Kdor pozna naslov strani, lahko vidi in spreminja podatke. Za družino je to v r
 
 ## Kako deluje
 - Vsak dan: 🐶 sprehod Zuma popoldne (do 19:00) in 🍽️ posoda (do 21:00).
-- Enkrat na teden (do nedelje 20:00): tla sesanje, tla pomivanje, kopalnica/WC. Dvakrat na teden (do srede in do nedelje 20:00): smeti, perilo pranje, perilo zlaganje/likanje.
+- Enkrat na teden (do nedelje 20:00): tla sesanje, tla pomivanje, kopalnica/WC. Dvakrat na teden (do srede in do nedelje 20:00): smeti, perilo pranje, perilo zlaganje. Perilo likanje enkrat na teden.
 - Vsak izbere enako število opravil na teden (skupno število / 4, zaokroženo navzgor).
 - V zavihku **Plan** si vsak sam izbere opravila in dneve, ko ima Zuma. Vrstice kažejo, koliko točk ima kdo glede na pravičen delež.
 - Kar ostane prosto, se samodejno dodeli tistemu z najmanj točkami ta teden: dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00.
 - Ostali ocenijo opravljeno (1–5★): 5★ = 125 %, 3★ = 95 %, 1★ = 65 % XP. Prevzem tujega opravila +20 %.
 - Kazni: zamuda −25 % XP, neopravljeno 24 h po roku −50 % XP opravila.
 - Pomotoma odkljukano opravilo vrneš z "↩ Razveljavi".
-- Opravila, XP in roke se spremenijo na vrhu datoteke `app.js`.
+- Vid ureja opravila, točke, roke in kazni v aplikaciji: Nagrade > ⚙️ Nastavitve opravil in točk.
