@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="sl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#4f46e5">
+<title>DOMA</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<style>
+:root{--bg:#f5f5fb;--card:#fff;--ink:#1d1b2f;--mute:#6b6880;--line:#e6e4f0;--pri:#4f46e5;--pri2:#eef0ff;--ok:#16a34a;--warn:#d97706;--bad:#dc2626;--gold:#f59e0b}
+@media (prefers-color-scheme:dark){:root{--bg:#121120;--card:#1c1b2e;--ink:#f1f0fa;--mute:#a09dba;--line:#2d2b45;--pri:#818cf8;--pri2:#26254a}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding-bottom:84px}
+header{position:sticky;top:0;z-index:5;background:var(--bg);padding:14px 16px 8px;display:flex;align-items:center;gap:12px}
+header .who{flex:1}
+header h1{margin:0;font-size:20px}
+header small{color:var(--mute)}
+.lvl{background:var(--pri);color:#fff;border-radius:999px;padding:4px 10px;font-weight:700;font-size:14px}
+.bar{height:8px;background:var(--line);border-radius:9px;overflow:hidden;margin-top:6px}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--pri),var(--gold))}
+main{padding:0 16px;max-width:640px;margin:0 auto}
+h2{font-size:15px;text-transform:uppercase;letter-spacing:.05em;color:var(--mute);margin:20px 0 8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px;margin-bottom:10px}
+.row{display:flex;align-items:center;gap:12px}
+.ico{font-size:28px;width:40px;text-align:center;flex:none}
+.grow{flex:1;min-width:0}
+.t{font-weight:600}
+.s{color:var(--mute);font-size:14px}
+.late{color:var(--bad)}
+.done{color:var(--ok)}
+button,.btn{font:inherit;border:0;border-radius:12px;padding:10px 14px;background:var(--pri);color:#fff;font-weight:600;cursor:pointer;text-decoration:none;display:inline-block}
+button.sec{background:var(--pri2);color:var(--pri)}
+button.ghost{background:none;color:var(--mute);padding:6px}
+button:disabled{opacity:.5}
+input,select,textarea{font:inherit;width:100%;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);margin:4px 0 10px}
+label{font-size:14px;color:var(--mute)}
+nav{position:fixed;bottom:0;left:0;right:0;background:var(--card);border-top:1px solid var(--line);display:flex;padding:6px 4px calc(6px + env(safe-area-inset-bottom));z-index:9}
+nav button{flex:1;background:none;color:var(--mute);padding:6px 0;font-size:11px;font-weight:600;position:relative}
+nav button b{display:block;font-size:22px}
+nav button.on{color:var(--pri)}
+.badge{position:absolute;top:2px;right:calc(50% - 22px);background:var(--bad);color:#fff;border-radius:9px;font-size:11px;padding:0 5px}
+.stars button{background:none;font-size:30px;padding:2px;color:var(--line)}
+.stars button.on{color:var(--gold)}
+.pill{display:inline-block;background:var(--pri2);color:var(--pri);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:600}
+img.ph{width:64px;height:64px;object-fit:cover;border-radius:10px;flex:none}
+img.big{width:100%;border-radius:12px;margin-top:8px}
+.users{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:30px}
+.users button{padding:26px 10px;font-size:20px;background:var(--card);color:var(--ink);border:1px solid var(--line)}
+.users button b{display:block;font-size:40px}
+.fab{position:fixed;right:18px;bottom:96px;width:56px;height:56px;border-radius:50%;font-size:28px;padding:0;box-shadow:0 6px 18px rgba(0,0,0,.2)}
+dialog{border:0;border-radius:18px;padding:18px;width:min(92vw,460px);background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.45)}
+.toast{position:fixed;left:50%;bottom:100px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:600;z-index:99;transition:opacity .3s}
+.mut{opacity:.55}
+.lb .n{font-size:22px;font-weight:800;width:30px}
+.seg{display:flex;gap:6px;margin-bottom:10px}
+.seg button{flex:1}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
