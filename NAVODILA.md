@@ -23,7 +23,7 @@ Aplikacija je spletna stran (PWA), ki jo vsak doda na domači zaslon telefona. P
 Kdor pozna naslov strani, lahko vidi in spreminja podatke. Za družino je to v redu, le povezave ne deli javno.
 
 ## Kako deluje
-- Dnevno: posoda (do 21:00) in dva sprehoda Zume (zjutraj do 10:00, zvečer do 21:00) se vsak dan zavrtijo, vsak dan jih ima drug član.
+- Dnevno: posoda (do 21:00) in dva sprehoda Zuma (zjutraj do 10:00, zvečer do 21:00) se vsak dan zavrtijo, vsak dan jih ima drug član.
 - Tedensko: kopalnica, tla + sesanje, perilo (rok nedelja 20:00) se vsak teden zavrtijo.
 - Ostali ocenijo opravljeno (1–5★). XP: 5★ = 125 %, 3★ = 95 %, 1★ = 65 %, zamuda −30 %, prevzem tujega opravila +20 %.
 - Opravila, XP in roke se spremenijo na vrhu datoteke `app.js`.

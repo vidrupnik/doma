@@ -12,8 +12,8 @@ const N = MEMBERS.length;
 // Dnevna opravila: vsak dan jih dobi drug član (offset poskrbi, da niso vsa na isti osebi)
 const DAILY = [
   { id: 'posoda', name: 'Pomivanje posode + zlaganje', ico: '🍽️', xp: 25, due: '21:00', off: 0 },
-  { id: 'zuma-j', name: 'Sprehod Zume (zjutraj)', ico: '🐕', xp: 20, due: '10:00', off: 1 },
-  { id: 'zuma-v', name: 'Sprehod Zume (zvečer)', ico: '🐕', xp: 20, due: '21:00', off: 3 },
+  { id: 'zuma-j', name: 'Sprehod Zuma (zjutraj)', ico: '🐕', xp: 20, due: '10:00', off: 1 },
+  { id: 'zuma-v', name: 'Sprehod Zuma (zvečer)', ico: '🐕', xp: 20, due: '21:00', off: 3 },
 ];
 // Tedenska opravila: rok nedelja 20:00, vsak teden se zavrtijo
 const WEEKLY = [
@@ -69,7 +69,7 @@ const Store = {
     if (REMOTE) {
       try {
         await api('items', { method: 'POST', headers: { Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ id, kind, data }) });
-      } catch (e) { this.pending(id); toast('Brez povezave – shranim, ko bo spet internet'); }
+      } catch (e) { this.pending(id); toast('Ni shranjeno v skupno bazo: ' + (this.lastError || 'brez povezave')); }
     }
   },
   async del(id) { const i = this.items[id]; if (i) await this.put(id, i.kind, { ...i.data, deleted: true }); },
@@ -94,14 +94,22 @@ const Store = {
       for (const r of rows) { this.items[r.id] = { id: r.id, kind: r.kind, data: r.data }; this.lastSync = r.updated_at; }
       this.save();
       if (rows.length) render();
-    } catch (e) { /* brez povezave – poskusimo kasneje */ }
+    } catch (e) { render(); }
   },
 };
 function api(path, opt = {}) {
   return fetch(CFG.supabaseUrl.replace(/\/$/, '') + '/rest/v1/' + path, {
     ...opt,
-    headers: { apikey: CFG.supabaseKey, Authorization: 'Bearer ' + CFG.supabaseKey, 'Content-Type': 'application/json', ...(opt.headers || {}) },
-  }).then((r) => { if (!r.ok) throw new Error(r.status); return r; });
+    headers: {
+      apikey: CFG.supabaseKey,
+      // novi ključi (sb_publishable_...) gredo samo v glavo apikey, stari (JWT) tudi v Authorization
+      ...(CFG.supabaseKey.startsWith('sb_') ? {} : { Authorization: 'Bearer ' + CFG.supabaseKey }),
+      'Content-Type': 'application/json', ...(opt.headers || {}),
+    },
+  }).then(async (r) => {
+    if (!r.ok) { const t = await r.text().catch(() => ''); Store.lastError = r.status + ' ' + t.slice(0, 200); throw new Error(Store.lastError); }
+    Store.lastError = ''; return r;
+  }, (e) => { Store.lastError = 'omrežje: ' + e.message; throw e; });
 }
 
 // ---------- Razpored ----------
@@ -171,7 +179,7 @@ const level = (xp) => Math.floor(Math.sqrt(xp / 50)) + 1;
 const lvlXp = (l) => 50 * (l - 1) ** 2;
 function badges(p) {
   const b = [];
-  if (p.zuma >= 10) b.push('🐕 Zumin prijatelj');
+  if (p.zuma >= 10) b.push('🐕 Zumov prijatelj');
   if (p.five >= 5) b.push('⭐ Perfekcionist');
   if (p.take >= 3) b.push('🦸 Rešitelj');
   if (p.proj >= 1) b.push('🏗️ Graditelj');
@@ -332,7 +340,7 @@ function viewRewards() {
     <button class="sec" data-act="newreward" style="width:100%;margin-top:6px">+ Dodaj nagrado</button>
     <h2>Pravila točk</h2><div class="card s">Ocena ostalih: 5★ = 125 %, 4★ = 110 %, 3★ = 95 %, 1★ = 65 % osnovnih XP. Zamuda −30 %. Prevzem tujega opravila +20 %. Osebne nagrade porabijo tvoje XP, nivo pa ostane.</div>
     <button class="ghost" data-act="logout" style="width:100%;margin-top:12px">Zamenjaj osebo (${esc(me)})</button>
-    <p class="s" style="text-align:center">${REMOTE ? '☁️ Povezano s skupno bazo' : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
+    <p class="s" style="text-align:center">${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
 }
 
 // ---------- Dialogi ----------
