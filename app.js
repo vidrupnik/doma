@@ -14,14 +14,14 @@ const DAILY = [
   { id: 'pes', name: 'Sprehod Zuma (popoldne)', ico: '🐶', xp: 25, due: '19:00' },
   { id: 'posoda', name: 'Posoda (pomivanje, stroj)', ico: '🍽️', xp: 25, due: '21:00' },
 ];
-// Tedenska opravila (enkrat na teden, rok nedelja 20:00)
+// Tedenska opravila (rok nedelja 20:00; twice = dvakrat na teden, prvič do srede 20:00)
 const WEEKLY = [
   { id: 'sesanje', name: 'Tla: sesanje', ico: '🧹', xp: 35 },
   { id: 'tla', name: 'Tla: pomivanje', ico: '🧽', xp: 35 },
   { id: 'kopalnica', name: 'Kopalnica, WC: čiščenje', ico: '🚿', xp: 60 },
-  { id: 'smeti', name: 'Smeti', ico: '🗑️', xp: 20 },
-  { id: 'pranje', name: 'Perilo: pranje', ico: '👕', xp: 30 },
-  { id: 'zlaganje', name: 'Perilo: zlaganje, likanje', ico: '👔', xp: 40 },
+  { id: 'smeti', name: 'Smeti', ico: '🗑️', xp: 20, twice: true },
+  { id: 'pranje', name: 'Perilo: pranje', ico: '👕', xp: 30, twice: true },
+  { id: 'zlaganje', name: 'Perilo: zlaganje, likanje', ico: '👔', xp: 40, twice: true },
 ];
 const LATE = 0.25;   // zamuda: −25 % XP
 const MISSED = 0.5;  // neopravljeno 24 h po roku: kazen −50 % XP opravila
@@ -135,8 +135,14 @@ function weekPlan(w) {
     }
   }
   const sun = fromDayIdx(w * 7 + 6), wed = fromDayIdx(w * 7 + 2);
-  WEEKLY.forEach((c) => slots.push({ id: c.id + '#' + w, def: c, week: w, day: w * 7 + 6,
-    due: new Date(sun.getFullYear(), sun.getMonth(), sun.getDate(), 20, 0).getTime(), autoAt: new Date(wed.getFullYear(), wed.getMonth(), wed.getDate(), 20, 0).getTime() }));
+  const mon = fromDayIdx(w * 7);
+  WEEKLY.forEach((c) => {
+    // prvi termin (do srede) za dvakrat-tedenska; v prvem tednu aplikacije ga izpustimo
+    if (c.twice && w > 0) slots.push({ id: c.id + 'a#' + w, def: c, week: w, day: w * 7 + 2, half: 1,
+      due: new Date(wed.getFullYear(), wed.getMonth(), wed.getDate(), 20, 0).getTime(), autoAt: new Date(mon.getFullYear(), mon.getMonth(), mon.getDate(), 12, 0).getTime() });
+    slots.push({ id: c.id + '#' + w, def: c, week: w, day: w * 7 + 6, half: c.twice ? 2 : 0,
+      due: new Date(sun.getFullYear(), sun.getMonth(), sun.getDate(), 20, 0).getTime(), autoAt: new Date(wed.getFullYear(), wed.getMonth(), wed.getDate(), 20, 0).getTime() });
+  });
   const claims = {};
   for (const s of slots) { const c = Store.get('c:' + s.id); if (c) claims[s.id] = c.data; }
   const now = Date.now(), start = startDay();
@@ -145,9 +151,10 @@ function weekPlan(w) {
     if (claims[s.id]) { s.who = claims[s.id].who; s.claimed = true; continue; }
     if (s.day < start || now < s.autoAt) { s.who = null; continue; }
     // samodejno: najmanj točk ta teden (upoštevamo izbire pred tem trenutkom + prejšnje samodejne)
+    // obremenitev = število opravil (glavno) + točke (pri enakem številu)
     const load = {}; MEMBERS.forEach((m) => (load[m.name] = 0));
-    for (const o of slots) if (claims[o.id] && claims[o.id].at < s.autoAt) load[claims[o.id].who] += o.def.xp;
-    for (const a of autos) load[a.who] += a.def.xp;
+    for (const o of slots) if (claims[o.id] && claims[o.id].at < s.autoAt && load[claims[o.id].who] != null) load[claims[o.id].who] += 1000 + o.def.xp;
+    for (const a of autos) load[a.who] += 1000 + a.def.xp;
     const order = MEMBERS.map((m, i) => MEMBERS[mod(i + w + s.day, N)].name);
     s.who = order.reduce((b, n) => (load[n] < load[b] ? n : b), order[0]);
     s.auto = true; autos.push(s);
@@ -302,10 +309,9 @@ let planWeek = 0;
 function viewPlan() {
   const w = weekIdx(new Date()) + planWeek, start = startDay();
   const slots = weekPlan(w).filter((t) => t.day >= start || !t.daily);
-  const load = {}; MEMBERS.forEach((m) => (load[m.name] = 0));
-  let total = 0;
-  slots.forEach((t) => { total += t.def.xp; if (t.who) load[t.who] += t.def.xp; });
-  const fair = Math.round(total / N);
+  const cnt = {}; MEMBERS.forEach((m) => (cnt[m.name] = 0));
+  slots.forEach((t) => { if (t.who && cnt[t.who] != null) cnt[t.who]++; });
+  const quota = Math.ceil(slots.length / N);
   const chip = (t) => {
     const d = Store.get(t.id);
     if (d) return `<span class="pill" style="background:none;color:var(--ok)">✔ ${esc(d.data.by)}</span>`;
@@ -316,15 +322,15 @@ function viewPlan() {
   const days = [...new Set(slots.filter((t) => t.daily).map((t) => t.day))];
   const mon = fromDayIdx(w * 7);
   return `<div class="seg"><button data-act="pweek" data-v="0" class="${planWeek === 0 ? '' : 'sec'}">Ta teden</button><button data-act="pweek" data-v="1" class="${planWeek === 1 ? '' : 'sec'}">Naslednji teden</button></div>
-    <div class="card"><div class="s" style="margin-bottom:6px">Pravičen delež: <b>${fair} XP</b> na osebo (teden od ${mon.getDate()}. ${mon.getMonth() + 1}.)</div>
-    ${MEMBERS.map((m) => `<div class="row" style="gap:8px;margin:4px 0"><span style="width:70px">${m.ico} ${esc(m.name)}</span><div class="bar grow" style="margin:0"><i style="width:${Math.min(100, (load[m.name] / (fair || 1)) * 100)}%"></i></div><span class="s" style="width:56px;text-align:right">${load[m.name]}</span></div>`).join('')}</div>
-    <h2>Enkrat na teden (do nedelje 20:00)</h2>
-    ${slots.filter((t) => !t.daily).map((t) => `<div class="card row" style="padding:10px 14px"><div class="ico">${t.def.ico}</div><div class="grow"><div class="t">${esc(t.def.name)}</div><div class="s">${t.def.xp} XP</div></div>${chip(t)}</div>`).join('')}
+    <div class="card"><div class="s" style="margin-bottom:6px">Vsak izbere <b>${quota} opravil</b> (skupaj ${slots.length}) (teden od ${mon.getDate()}. ${mon.getMonth() + 1}.)</div>
+    ${MEMBERS.map((m) => `<div class="row" style="gap:8px;margin:4px 0"><span style="width:70px">${m.ico} ${esc(m.name)}</span><div class="bar grow" style="margin:0"><i style="width:${Math.min(100, (cnt[m.name] / quota) * 100)}%"></i></div><span class="s" style="width:56px;text-align:right">${cnt[m.name]} / ${quota}</span></div>`).join('')}</div>
+    <h2>Tedenska opravila</h2>
+    ${slots.filter((t) => !t.daily).sort((a, b) => a.due - b.due).map((t) => `<div class="card row" style="padding:10px 14px"><div class="ico">${t.def.ico}</div><div class="grow"><div class="t">${esc(t.def.name)}${t.half ? ` <span class="pill">${t.half}. krat</span>` : ''}</div><div class="s">do ${fmtDue(t.due)} · ${t.def.xp} XP</div></div>${chip(t)}</div>`).join('')}
     <h2>Vsak dan: 🐶 Zum (popoldne) in 🍽️ posoda</h2>
     ${days.map((d) => { const dt = fromDayIdx(d); const [pes, pos] = DAILY.map((c) => slots.find((t) => t.id === c.id + '@' + d));
       return `<div class="card" style="padding:10px 14px"><div class="t" style="margin-bottom:6px">${DNI[dt.getDay()]} ${dt.getDate()}. ${dt.getMonth() + 1}.${d === dayIdx(new Date()) ? ' · danes' : ''}</div>
         <div class="row" style="justify-content:space-between"><span>🐶 ${chip(pes)}</span><span>🍽️ ${chip(pos)}</span></div></div>`; }).join('')}
-    <p class="s">Kar ostane prosto, se samodejno (⚙) dodeli tistemu z najmanj točkami: dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00. Svojo izbiro lahko sprostiš s ✕, dokler ni opravljeno.</p>`;
+    <p class="s">Vsak lahko izbere največ toliko opravil, kot je njegov delež. Kar ostane prosto, se samodejno (⚙) dodeli tistemu z najmanj opravili: dnevna opravila isti dan ob 12:00, tedenska v sredo ob 20:00. Svojo izbiro lahko sprostiš s ✕, dokler ni opravljeno.</p>`;
 }
 
 function viewRate() {
@@ -403,11 +409,11 @@ function viewRewards() {
     }).join('') || '<div class="card s">Še ni skupinskih nagrad.</div>'}
     <h2>Moje nagrade · na voljo ${avail} XP</h2>
     ${rws.filter((r) => !r.data.group).map((r) => `<div class="card row"><div class="ico">🎁</div><div class="grow"><div class="t">${esc(r.data.title)}</div><div class="s">${r.data.cost} XP${(r.data.claims || []).length ? ' · unovčili: ' + r.data.claims.map((c) => esc(c.by)).join(', ') : ''}</div></div>
-      <button data-act="claim" data-v="${r.id}" ${avail < r.data.cost ? 'disabled' : ''}>Unovči</button></div>`).join('') || '<div class="card s">Še ni nagrad.</div>'}
+      <button data-act="claim" data-v="${r.id}" ${avail < r.data.cost ? 'disabled' : ''}>Unovči</button><button class="ghost" data-act="delreward" data-v="${r.id}">🗑</button></div>`).join('') || '<div class="card s">Še ni nagrad.</div>'}
     <button class="sec" data-act="newreward" style="width:100%;margin-top:6px">+ Dodaj nagrado</button>
     <h2>Pravila točk</h2><div class="card s">Ocena ostalih: 5★ = 125 %, 4★ = 110 %, 3★ = 95 %, 1★ = 65 % osnovnih XP. Zamuda −25 %. Neopravljeno 24 h po roku: kazen −50 % XP opravila. Prevzem tujega opravila +20 %. Osebne nagrade porabijo tvoje XP, nivo pa ostane.</div>
     <button class="ghost" data-act="logout" style="width:100%;margin-top:12px">Zamenjaj osebo (${esc(me)})</button>
-    <p class="s" style="text-align:center">v4 · ${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
+    <p class="s" style="text-align:center">v5 · ${REMOTE ? (Store.lastError ? '⚠️ Napaka baze: ' + esc(Store.lastError) : '☁️ Povezano s skupno bazo') : '📱 Lokalni način (podatki samo na tem telefonu)'}</p>`;
 }
 
 // ---------- Dialogi ----------
@@ -460,7 +466,11 @@ const actions = {
     });
   },
   pweek: (v) => { planWeek = +v; render(); },
-  claim1: async (id) => { await Store.put('c:' + id, 'claim', { who: me, at: Date.now() }); toast('Vzel si opravilo ✔'); },
+  claim1: async (id) => {
+    const t = taskById(id); if (!t) return;
+    const slots = weekPlan(t.week);
+    const quota = Math.ceil(slots.length / N), mine = slots.filter((x) => x.who === me).length;
+    if (mine >= quota) return toast(`Ta teden imaš že ${quota} opravil. Ostalo izberejo drugi ali se dodeli samodejno.`); await Store.put('c:' + id, 'claim', { who: me, at: Date.now() }); toast('Vzel si opravilo ✔'); },
   release: async (id) => { await Store.del('c:' + id); },
   undo: async (id) => {
     if (!confirm('Vrnem opravilo nazaj na neopravljeno? Ocene se izbrišejo.')) return;
@@ -506,6 +516,7 @@ const actions = {
       if (!f.title.value.trim()) return;
       await Store.put(uid(), 'reward', { title: f.title.value.trim(), group: f.group.value === '1', cost: +f.cost.value || 100, created: Date.now(), claims: [] });
     }),
+  delreward: (id) => { if (confirm('Izbrišem nagrado?')) Store.del(id); },
   claim: async (id) => {
     const r = Store.get(id);
     if (!confirm(`Unovčim "${r.data.title}"?`)) return;
@@ -519,6 +530,30 @@ document.addEventListener('click', (e) => {
 });
 
 // ---------- Zagon ----------
+// Nagrade (dodajo se tudi v skupno bazo, če jih še ni)
+const REWARDS = [
+  ['r-film', 'Ti izbereš film za družinski večer 🎬', false, 150],
+  ['r-joker', 'Joker: nekdo drug naredi eno tvoje opravilo 🃏', false, 250],
+  ['r-vecerja', 'Izbereš večerjo', false, 300],
+  ['r-zajtrk', 'Zajtrk v posteljo ☕', false, 350],
+  ['r-prost', 'Cel dan brez opravil 😴', false, 450],
+  ['r-kino', 'Kino + kokice 🍿', false, 550],
+  ['r-avto', 'Avto za cel vikend 🚗', false, 650],
+  ['r-opravilo', 'Teden brez enega opravila', false, 800],
+  ['r-spotify', 'Mesec Spotify / Netflix plačan 🎧', false, 900],
+  ['r-sushi', 'Kosilo v restavraciji po izbiri 🍣', false, 1000],
+  ['r-lepota', 'Frizer / manikura / masaža (do 25 €) 💅', false, 1200],
+  ['r-bon', 'Bon 30 € za trgovino po izbiri 🛍️', false, 1500],
+  ['r-pica', 'Družinska pica večer 🍕', true, 2000],
+  ['r-bowling', 'Bowling ali escape room 🎳', true, 3500],
+  ['r-izlet', 'Družinski izlet', true, 6000],
+  ['r-terme', 'Dan v termah 🏖️', true, 9000],
+];
+function seedRewards() {
+  if (!me && REMOTE && !Store.lastSync) return;
+  for (const [id, title, group, cost] of REWARDS)
+    if (!Store.items[id]) Store.put(id, 'reward', { title, group, cost, created: Date.now(), claims: [] });
+}
 function seed() {
   if (localStorage.getItem('doma-seeded') || Store.list('reward').length) return;
   localStorage.setItem('doma-seeded', '1');
@@ -534,7 +569,7 @@ Store.load();
 seed();
 render();
 // zapomni si dan začetka, da ne kaže "zamujenih" opravil izpred uporabe aplikacije
-Store.sync().then(() => { if (!Store.get('start')) Store.put('start', 'meta', { day: dayIdx(new Date()) }); });
+Store.sync().then(() => { if (!REMOTE || Store.lastSync) seedRewards(); if (!Store.get('start')) Store.put('start', 'meta', { day: dayIdx(new Date()) }); });
 setInterval(() => { if (!document.hidden) Store.sync(); }, 60000);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { Store.sync(); render(); } });
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
